@@ -1,0 +1,14 @@
+<Page xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <TextBlock Grid.Row="0" Text="常规设置" Margin="18,20,0,18" FontSize="24"/>
+        <StackPanel Grid.Row="1" Margin="36,0,0,0" Orientation="Vertical">
+            <ToggleSwitch x:Name="WriteMetaSetting" Header="对音频写入元数据" IsOn="True" Toggled="OnWriteMetaToggled"/>
+            <ToggleSwitch x:Name="PackSetting" Header="将音频元数据打包为ZIP文件" IsOn="False" Toggled="OnPackToggled"/>
+        </StackPanel>
+    </Grid>
+</Page>

@@ -9,8 +9,8 @@
             <RowDefinition/>
         </Grid.RowDefinitions>
         <Grid x:Name="AppTitleBar" Margin="48,0,0,0" Height="48" Canvas.ZIndex="1">
-            <Image Source="https://music.163.com/favicon.ico" Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Left"/>
-            <TextBlock x:Name="AppTitleText" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" Margin="32,0,0,0">冈易云音乐下载器</TextBlock>
+            <Image Source="https://gitee.com/S-1-5-21-1726115125-1917/StaticResource/raw/main/favicon.ico" Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+            <TextBlock x:Name="AppTitleText" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" Margin="32,0,0,0">普普通通的音乐下载器</TextBlock>
         </Grid>
         <NavigationView x:Name="MainNavView"
                         SelectionChanged="OnNavigationSelectionChanged"
@@ -19,7 +19,8 @@
                         BackRequested="OnBackRequested"
                         Grid.RowSpan="2">
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="下载器" Icon="Download" Tag="Downloader"/>
+                <NavigationViewItem Content="网易云音乐下载器" Icon="Download" Tag="NeteaseMusicDownloader"/>
+                <NavigationViewItem Content="QQ音乐下载器" Icon="Download" Tag="QQMusicDownloader"/>
             </NavigationView.MenuItems>
             <NavigationView.Resources>
                 <Thickness x:Key="NavigationViewContentMargin">0,48,0,0</Thickness>

@@ -1,3 +1,4 @@
+win32more-Microsoft.WindowsAppSDK==0.8.1.7.251107005
 win32more
 requests
 mutagen

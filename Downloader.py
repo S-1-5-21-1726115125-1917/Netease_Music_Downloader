@@ -1,12 +1,20 @@
-API_ADDR:str="https://api.kxzjoker.cn/api/163_music"
+#我只是一只快乐的API Caller:(
+#另外有个功能正常的:https://blog.cyrui.cn/netease/api/getMusicUrl.php
+#但是返回格式非常阴间，我是不可能用在这里的，然而由于tmetu.cn的暴似，导致我不得不去上面这个了（悲）
+API_ADDR:str="https://www.tmetu.cn/api/music/api.php" #R.I.P
+API_ADDR_LRC:str="https://blog.cyrui.cn/netease/api/getLyric.php"
+API_ADDR_INFO:str="https://blog.cyrui.cn/netease/api/getSongDetail.php"
+API_ADDR_LINK:str="https://blog.cyrui.cn/netease/api/getMusicUrl.php"
 LEVELS:dict[str,str]={
     "标准":"standard",
     "极高":"exhigh",
     "无损(CD)":"lossless",
+    "Vivid":"vivid", #(这啥?我不知道啊?打都打不开,12声道干啥去了?)
     "Hi-Res":"hires",
-    "高清环绕声":"jyeffect", #(这个纯扯淡)
-    "沉浸环绕声":"sky", #(扯淡x2)
+    "高清环绕声":"sky", #(这个纯扯淡)
+    "沉浸环绕声":"jyeffect", #(扯淡x2)
     "超清母带(最高)":"jymaster" #(扯淡x3,甚至还用AI造假,发行商根本没发行过这个音质)
+    #然而相对QQ音乐的所谓“AI伴唱模式”“AI5.1音质”而言，网易还是太拟人了
 }
 SETTINGS:dict[str,bool]={
     "Pack":False,
@@ -21,71 +29,56 @@ from io import BytesIO
 import json
 import mutagen.flac,mutagen.m4a,mutagen.mp3
 from _collections_abc import Iterator
+from urllib.parse import urlparse
+import time
 
 from Structure import *
 
-def AskSaveFileName(DefaultName:str,FileType:tuple[str,str]|list[tuple[str,str]])->str:
-    GetSaveFileNameW=windll.comdlg32.GetSaveFileNameW
-    class OPENFILENAMEW(Structure):
-        lStructSize:UINT
-        hwndOwner:HWND
-        hInstance:HWND
-        lpstrFilter:LPCWSTR
-        lpstrCustomFilter:LPWSTR
-        nMaxCustFilter:UINT
-        nFilterIndex:UINT
-        lpstrFile:LPWSTR
-        nMaxFile:UINT
-        lpstrFileTitle:LPWSTR
-        nMaxFileTitle:UINT
-        lpstrInitialDir:LPCWSTR
-        lpstrTitle:LPCWSTR
-        Flags:UINT
-        nFileOffset:WORD
-        nFileExtension:WORD
-        lpstrDefExt:LPCWSTR
-        lCustData:UINT
-        lpfnHook:c_void_p
-        lpTemplateName:LPCWSTR
-        pvReserved:c_void_p
-        dwReserved:UINT
-        FlagsEx:UINT
-
-    Buffer=create_unicode_buffer(260)
-    Buffer.value=DefaultName[:259]
-    TitleBuffer=create_unicode_buffer(260)
-    TitleBuffer.value=DefaultName[:259]
-
-    Ofn=OPENFILENAMEW()
-    Ofn.lStructSize=sizeof(OPENFILENAMEW)
-    Ofn.hwndOwner=0
-
-    Ofn.lpstrFile=cast(Buffer, c_wchar_p)
-    Ofn.nMaxFile=260
-    Ofn.lpstrFileTitle=cast(TitleBuffer, c_wchar_p)
-    Ofn.nMaxFileTitle=260
-    Ofn.lpstrTitle="选择保存位置"
-    _defext = DefaultName.split(".")[-1] if "." in DefaultName else ""
-    Ofn.lpstrDefExt=_defext if _defext=="" else cast(create_unicode_buffer(_defext), c_wchar_p)
-    Ofn.Flags=0x00080000|0x00001000|0x00000800|0x00000008
-
-    if isinstance(FileType,tuple):
-        FileType=[FileType]
-    FilterStr=""
-    for Description,Pattern in FileType:
-        FilterStr+=f"{Description} ({Pattern})\0{Pattern}\0"
-    FilterStr+="\0"
-    
-    FilterBuffer = create_unicode_buffer(FilterStr)
-    Ofn.lpstrFilter = cast(FilterBuffer, c_wchar_p)
-    Ofn.nFilterIndex=1
-
-    if GetSaveFileNameW(byref(Ofn)):
-        print(Buffer.value)
-        return Buffer.value
-    else:
-        print(FormatError(GetLastError()))
-        return ""
+def GetSongInfo(ID:int,Level:str)->dict[Any,Any]:
+    LyricResp:dict[Any,Any]=requests.get(
+        url=API_ADDR_LRC,
+        params={
+            "id":ID
+        }
+    ).json()
+    InfoResp:dict[Any,Any]=requests.get(
+        url=API_ADDR_INFO,
+        params={
+            "id":ID
+        }
+    ).json()
+    LinkResp:dict[Any,Any]=requests.get(
+        url=API_ADDR_LINK,
+        params={
+            "id":ID,
+            "level":Level
+        }
+    ).json()
+    ReturnCode:dict[str,int]={
+        "lyric":LyricResp["code"],
+        "info":InfoResp["code"],
+        "link":LinkResp["code"]
+    } #这下正常了
+    Lyric:str=LyricResp["lrc"]["lyric"]
+    TranslatedLyric:str=LyricResp["tlyric"]["lyric"]
+    Name:str=InfoResp["songs"][0]["name"]
+    Artists:str="/".join([Item["name"] for Item in InfoResp["songs"][0]["ar"]]) #我真是服了这个阴间格式了
+    AlbumName:str=InfoResp["songs"][0]["al"]["name"]
+    PictureURL:str=InfoResp["songs"][0]["al"]["picUrl"]
+    Link:str=LinkResp["data"][0]["url"]
+    return {
+        "data":{
+            "album":AlbumName,
+            "artists":Artists,
+            "picUrl":PictureURL,
+            "name":Name,
+            "audioUrl":Link,
+            "tlyric":TranslatedLyric,
+            "lyric":Lyric
+        },
+        "codes":ReturnCode,
+        "time":time.strftime("%Y-%m-%d %H:%M:%S",time.localtime())
+    }
 
 class Initnalizer(ABC):
     @abstractmethod
@@ -120,10 +113,12 @@ class SongInfo(Initnalizer):
         self.Level=Level
         self.Lrc:str=""
         self.TranslatedLrc:str=""
+        self.Error:bool=False
+        self.ErrorMessage:str="成功"
     
     @property
     def Format(self)->str:
-        return [Value for Value in self.URL.split("/") if ("." in Value) and ("?" in Value)][0].split("?")[0].split(".")[-1]
+        return Path(urlparse(self.URL).path).suffix.lstrip(".")
     
     @Format.setter
     def Format(self,Value:str)->None:
@@ -138,31 +133,44 @@ class SongInfo(Initnalizer):
         raise AttributeError("IsInitnalized属性是只读的")
 
     def __repr__(self)->str:
-        return f"SongInfo({self.ID})"
+        return f"SongInfo({self.ID},{self.URL},{self.PictureURL})"
     
     __str__=__repr__
 
     def Initnalize(self)->None:
-        Resp:requests.Response=requests.get(API_ADDR,params={
-            "ids":self.ID,
-            "level":self.Level,
-            "type":"json"
-        })
-        Resp.raise_for_status()
-        Data:dict[str,Any]=Resp.json()
-        if Data["status"]!=200:
-            raise requests.exceptions.HTTPError(f"API请求失败，返回码{Data['code']}")
+        try:
+            Data:dict[Any,Any]=GetSongInfo(self.ID,self.Level)
+        except Exception as E:
+            self.Error=True
+            self.ErrorMessage=str(E)
+            return
         
-        self.Album=Data["al_name"]
-        self.Artist=Data["ar_name"]
-        self.PictureURL=Data["pic"]
-        self.Title=Data["name"]
-        self.URL=Data["url"]
-        if Data["tlyric"]!=None:
-            self.TranslatedLrc=Data["tlyric"]
-        else:
-            self.TranslatedLrc=""
-        self.Lrc=Data["lyric"]
+        if (Data["codes"]["lyric"]!=200 or 
+           Data["codes"]["info"]!=200 or 
+           Data["codes"]["link"]!=200):
+            self.Error=True
+            self.ErrorMessage="API返回结果为:\n"+json.dumps(Data,indent=4)
+        
+        try:
+            if Data["data"]["audioUrl"]:
+                print(repr(Data["data"]["audioUrl"]))
+                self.URL=Data["data"]["audioUrl"]
+            else:
+                print("[Debug]无法获取链接")
+                self.Error=True
+                self.ErrorMessage="API返回结果为:\n"+json.dumps(Data,indent=4)+"\n其中URL为空"
+            self.Album=Data["data"]["album"]
+            self.Artist=Data["data"]["artists"]
+            self.PictureURL=Data["data"]["picUrl"]
+            self.Title=Data["data"]["name"]
+            if Data["data"].get("tlyric",None)!=None:
+                self.TranslatedLrc=Data["data"]["tlyric"] #现在有了
+            else:
+                self.TranslatedLrc=""
+            self.Lrc=Data["data"]["lyric"]
+        except Exception as E:
+            self.ErrorMessage+="并且在尝试设置部分字段的值时失败，原因:"+str(E)
+        print(Data)
     
     def Download(self,Path:str)->Iterator[tuple[float,str]]:
         Stream:requests.Response=requests.get(self.URL,stream=True)
@@ -203,18 +211,21 @@ class SongInfo(Initnalizer):
                 MetaWriter.tags.add(TALB(encoding=3,text=self.Album))
                 Picture=APIC(encoding=3,mime="image/jpeg",type=3,desc="Cover",data=ImageData.read())
                 MetaWriter.tags.add(Picture)
-            else:
+            elif self.Format=="flac":
                 MetaWriter["album"]=self.Album
                 MetaWriter["artist"]=self.Artist.split("/")
                 MetaWriter["title"]=self.Title
+                MetaWriter["lyrics"]=self.Lrc #FLAC支持内联歌词
                 Picture=Mutagen.Picture()
                 Picture.data=ImageData.read()
                 Picture.type=3
                 Picture.mime=ImageResp.headers.get("Content-Type","image/jpeg")
                 Picture.desc="Cover"
                 MetaWriter.add_picture(Picture)
+            else: #这mp4我还真不知道怎么处理了（Vivid返回的就是mp4）
+                pass
         
-        if self.Format=="flac":
+        if self.Format=="flac" or self.Format=="mp4":
             MetaWriter.save(FilePath) #必须保存到文件才能写入
         else:
             MetaWriter.save(FilePath,v2_version=3)
@@ -235,7 +246,7 @@ class SongInfo(Initnalizer):
                 
                 Zip.writestr("{} - {}.jpg".format(self.Title,self.Artist.replace("/",";")),ImageData.read())
                 ImageData.close()
-                Zip.writestr("Info.txt",f"歌名:{self.Title}\r\n作者:{self.Artist}\r\n专辑:{self.Album}\r\n音质:{[Key for Key,Value in LEVELS.items() if Value==self.Level][0]}\r\nID:{self.ID}\r\n下载自:网易云音乐\r\nAPI提供者:kxzjoker")
+                Zip.writestr("Info.txt",f"歌名:{self.Title}\r\n作者:{self.Artist}\r\n专辑:{self.Album}\r\n音质:{[Key for Key,Value in LEVELS.items() if Value==self.Level][0]}\r\nID:{self.ID}\r\n下载自:网易云音乐\r\nAPI提供者:多个")
             
             ZipData.seek(0)
             with open(Path if Path.lower().endswith(".zip") else Path+".zip","wb") as F:
@@ -254,12 +265,14 @@ class SongInfo(Initnalizer):
 
 #UI
 #1908182683
+#2735521247
 
-from win32more.appsdk.xaml import XamlApplication,XamlClass,XamlType,xaml_typename
-from win32more.winrt.base import unbox_value
+from win32more.winui3 import XamlApplication,XamlClass,XamlType,xaml_typename
+from win32more._winrt import unbox_value
 from win32more.Windows.UI.Xaml.Interop import TypeKind
-from win32more.Microsoft.UI.Xaml import Window,RoutedEventArgs,Thickness
+from win32more.Microsoft.UI.Xaml import Window,RoutedEventArgs,Thickness,Visibility
 from win32more.Windows.Foundation import IInspectable,Uri
+from win32more.Windows.Storage.Pickers import FileSavePicker
 from win32more.Microsoft.UI.Xaml.Controls import (
     NavigationView,NavigationViewSelectionChangedEventArgs,NavigationViewItem,Frame,
     Page,Grid,TextBox,ComboBoxItem,SelectionChangedEventArgs,ComboBox,StackPanel,Image,ProgressRing,MediaPlayerElement,
@@ -306,7 +319,7 @@ class Loading(XamlClass,Grid):
     def InitializeComponent(self)->None:
         self.LoadComponentFromFile(Path(__file__).with_name("Loading.xaml"))
 
-class Templete(XamlClass,Grid):
+class Template(XamlClass,Grid):
     def __init__(self,ID:str,Level:str):
         super().__init__(own=True)
         self.InitializeComponent()
@@ -316,34 +329,62 @@ class Templete(XamlClass,Grid):
         asyncio.create_task(self.InitializeInfo()) #异步初始化
     
     def InitializeComponent(self)->None:
-        self.LoadComponentFromFile(Path(__file__).with_name("Templete.xaml"))
+        self.LoadComponentFromFile(Path(__file__).with_name("Template.xaml"))
     
     async def InitializeInfo(self)->None:
         self.Info:SongInfo=SongInfo(int(self.ID),Level=self._Level,Pack=SETTINGS["Pack"],WriteMeta=SETTINGS["WriteMeta"])
         Loop=asyncio.get_event_loop()
         await Loop.run_in_executor(None,self.Info.Initnalize)
+        if self.Info.Error:
+            self.ErrorBox.IsOpen=True
+            self.ErrorBox.Message=self.Info.ErrorMessage
+            self.DownloadButton.IsEnabled=False
+            self.InfoContent.Visibility=Visibility.Collapsed
+        
         self.Title.Text=self.Info.Title
         self.Artist.Text=self.Info.Artist
         self.Album.Text=self.Info.Album
         self.Format.Text=self.Info.Format
         print(self.Info.URL,self.Info.Format)
-        TempBitmap:BitmapImage=BitmapImage()
-        TempBitmap.UriSource=Uri(self.Info.PictureURL)
-        TempImage=Image()
-        TempImage.Source=TempBitmap
-        self.Cover.Child=TempImage
+        try:
+            TempBitmap:BitmapImage=BitmapImage()
+            TempBitmap.UriSource=Uri(self.Info.PictureURL)
+            TempImage=Image()
+            TempImage.Source=TempBitmap
+            self.Cover.Child=TempImage
+        except:
+            pass
         self.Level.Text=self._Level
-        TempMediaPlayerElement:MediaPlayerElement=MediaPlayerElement(own=True,move=XamlReader.Load("<MediaPlayerElement xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\" AreTransportControlsEnabled=\"True\" AutoPlay=\"False\" HorizontalAlignment=\"Center\" Source=\"{}\"/>".format(self.Info.URL.replace("&","&amp;"))))
-        self.AudioPlayer.Child=TempMediaPlayerElement
+        try:
+            XamlSource:str="<MediaPlayerElement xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\" AreTransportControlsEnabled=\"True\" AutoPlay=\"False\" HorizontalAlignment=\"Center\" Source=\"{}\"/>".format(self.Info.URL.replace("&","&amp;"))
+            print(self.Info.URL)
+            print(XamlSource)
+            print(self.Info)
+            TempMediaPlayerElement:MediaPlayerElement=MediaPlayerElement(own=True,move=XamlReader.Load(XamlSource))
+            self.AudioPlayer.Child=TempMediaPlayerElement
+        except:
+            pass
         self.Initnialized=True
-    
+
     async def OnDownloadClick(self,sender:IInspectable,args:RoutedEventArgs):
         if not self.Initnialized:
             print("[WARN] 信息未初始化完成，无法下载")
             args.Handled=False
             return
+        
+
         DefaultName:str="{} - {}.{}".format(self.Info.Title,self.Info.Artist.replace("/",";"),self.Info.Format)
-        SavePath:str=AskSaveFileName(DefaultName,[(f"{self.Info.Format.upper()}音频文件",f"*.{self.Info.Format}"),("所有文件","*.*")])
+        from tkinter import Tk,filedialog
+        TempWindow:Tk=Tk()
+        TempWindow.withdraw()
+        TempWindow.iconbitmap(default="Program\\favicon.ico")
+        SavePath:str=filedialog.asksaveasfilename(
+            parent=TempWindow,
+            title="选择保存位置",
+            initialfile=DefaultName,
+            filetypes=[(f"{self.Info.Format.upper()}音频文件",f"*.{self.Info.Format}"),("所有文件","*.*")]
+        )
+        TempWindow.destroy()
         if SavePath=="":
             print("[WARN] 未选择保存位置，取消下载")
             args.Handled=False
@@ -395,13 +436,12 @@ class DownloaderPage(XamlClass,Page):
         _Loading=Loading("正在获取歌曲信息...")
         self.InfoContent.Children.Clear()
         self.InfoContent.Children.Append(_Loading)
-        _Templete=Templete(self.InputBox.Text,self.SelectedLevel)
-        while not _Templete.Initnialized:
-            print(_Templete.Initnialized,end="\r")
+        _Template=Template(self.InputBox.Text,self.SelectedLevel)
+        while not _Template.Initnialized:
             await asyncio.sleep(0.1)
         
         self.InfoContent.Children.Clear()
-        self.InfoContent.Children.Append(_Templete)
+        self.InfoContent.Children.Append(_Template)
         args.Handled=True
     
     def LevelChanged(self,sender:IInspectable,args:SelectionChangedEventArgs)->None:
